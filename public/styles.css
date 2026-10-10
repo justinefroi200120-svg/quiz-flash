@@ -1,0 +1,97 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #111827;
+  color: white;
+  margin: 0;
+  padding: 20px;
+}
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+.card {
+  background: #1f2937;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+input, button {
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  margin: 6px 0;
+  font-size: 16px;
+}
+input {
+  width: 100%;
+  box-sizing: border-box;
+}
+button {
+  cursor: pointer;
+  background: #2563eb;
+  color: white;
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* NEW STYLES FOR TEXTAREA */
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #4b5563;
+  margin: 6px 0 12px 0;
+  font-size: 14px;
+  background: #111827;
+  color: #a78bfa; /* Light purple for easy reading */
+  font-family: monospace;
+  resize: vertical;
+}
+.questions-box {
+  background: #374151;
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 15px;
+}
+
+.choice {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  text-align: left;
+  background: #374151;
+}
+.teacher-only {
+  display: none;
+}
+.show {
+  display: block;
+}
+.muted {
+  color: #9ca3af;
+  font-size: 14px;
+}
+.good {
+  color: #4ade80;
+}
+.bad {
+  color: #f87171;
+}
+.timer {
+  font-size: 30px;
+  font-weight: bold;
+  margin: 10px 0;
+}
+.badge {
+  display: inline-block;
+  padding: 6px 10px;
+  background: #111827;
+  border-radius: 999px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}

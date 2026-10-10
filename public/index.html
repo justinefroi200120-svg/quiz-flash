@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Quiz Flash</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>The Quiz Flash</h1>
+      <p class="muted">Fast-paced, accurate, and totally under control.</p>
+    </div>
+
+    <div class="card" id="teacherCard">
+      <h2>Teacher Panel</h2>
+      <input id="teacherPasskey" placeholder="Enter teacher passkey" />
+      <button onclick="startTeacherMode()">Unlock Teacher Panel</button>
+      
+      <div id="teacherControls" style="display:none; margin-top: 12px;">
+        <h3 style="color: #4ade80;">Room Code: <span id="displayRoomCode">----</span></h3>
+        <p class="muted">Give this code to your students to join.</p>
+        
+        <div class="questions-box">
+          <p class="muted" style="margin-top: 0;"><strong>Custom Questions (JSON)</strong></p>
+          <textarea id="questionsInput" rows="8" spellcheck="false"></textarea>
+          <button onclick="updateQuestions()" style="background: #10b981;">Load Questions</button>
+        </div>
+        
+        <hr style="border: 1px solid #374151; margin: 20px 0;">
+
+        <button onclick="startQuiz()">Start Quiz</button>
+        <button id="pauseBtn" onclick="togglePause()" style="background: #eab308;">Pause Timer</button>
+        <button onclick="nextQuestion()">Force Next</button>
+        <button onclick="resetQuiz()" style="background: #ef4444;">Reset Quiz & New Code</button>
+        <button onclick="saveResults()">Save and Download PDF</button>
+      </div>
+      <div id="teacherStatus" class="muted"></div>
+    </div>
+
+    <div class="card" id="studentCard">
+      <h2>Join Quiz</h2>
+      <input id="joinCode" placeholder="4-Digit Room Code" maxlength="6" style="text-transform: uppercase;" />
+      <input id="name" placeholder="Your name" maxlength="20" />
+      <button onclick="joinQuiz()">Join Quiz</button>
+      <div id="me" class="muted"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="questionTitle">Waiting for teacher...</h2>
+      <div class="timer" id="timer">--</div>
+      <div id="choices"></div>
+      <div id="result"></div>
+    </div>
+
+    <div class="card">
+      <h2>Leaderboard</h2>
+      <div id="leaderboard"></div>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    let teacherMode = false;
+    let myAnswered = false;
+    let mySelected = null;
+    let localQuestionIndex = -1;
+
+    document.getElementById('questionsInput').value = JSON.stringify([
+      {
+        "text": "What is the capital of Japan?",
+        "choices": ["Seoul", "Beijing", "Tokyo", "Bangkok"],
+        "correct": 2,
+        "timeLimit": 15
+      },
+      {
+        "text": "What is 10 + 15?",
+        "choices": ["20", "25", "30", "35"],
+        "correct": 1,
+        "timeLimit": 10
+      }
+    ], null, 2);
+
+    function updateQuestions() {
+      try {
+        const val = document.getElementById('questionsInput').value;
+        const parsed = JSON.parse(val);
+        socket.emit('teacher:load-questions', parsed);
+      } catch (e) {
+        alert('Invalid JSON format! Please check your quotes and brackets.');
+      }
+    }
+
+    socket.on('teacher:pdf-ready', (pdfBuffer) => {
+      const blob = new Blob([pdfBuffer], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Quiz_Results_${Date.now()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+    });
+
+    socket.on('teacher:questions-loaded', () => alert('Questions loaded successfully!'));
+
+    function saveResults() { socket.emit('teacher:save'); }
+    function startTeacherMode() {
+      const passkey = document.getElementById('teacherPasskey').value.trim();
+      socket.emit('teacher:claim', passkey);
+    }
+
+    function joinQuiz() {
+      const name = document.getElementById('name').value.trim();
+      const code = document.getElementById('joinCode').value.trim();
+      if (!code) { alert('Enter the Room Code.'); return; }
+      if (!name) { alert('Enter your name.'); return; }
+      socket.emit('join', { name, code });
+    }
+
+    function startQuiz() { socket.emit('teacher:start'); }
+    function nextQuestion() { socket.emit('teacher:next'); }
+    function togglePause() { socket.emit('teacher:toggle-pause'); }
+    function resetQuiz() { socket.emit('teacher:reset'); }
+
+    function answer(index) {
+      if (myAnswered) return;
+      myAnswered = true;
+      mySelected = index;
+      socket.emit('answer', index);
+      document.getElementById('result').innerHTML = '<p class="muted">Answer submitted. Waiting for result...</p>';
+      const choiceButtons = document.querySelectorAll('.choice');
+      choiceButtons.forEach(btn => btn.disabled = true);
+    }
+
+    function renderLeaderboard(players) {
+      const html = players.map((p, i) => {
+        return '<div class="badge">#' + (i + 1) + ' ' + p.name + ' - ' + p.score + ' pts</div>';
+      }).join('');
+      document.getElementById('leaderboard').innerHTML = html || '<p class="muted">No players yet.</p>';
+    }
+
+    // Server sends active timer updates to stay perfectly in sync
+    socket.on('timer-tick', (data) => {
+      const timerEl = document.getElementById('timer');
+      timerEl.innerText = data.timeLeft > 0 ? data.timeLeft + 's' : '0s';
+      if(data.isPaused) {
+        timerEl.innerText += " (PAUSED)";
+      }
+    });
+
+    socket.on('update', data => {
+      if (data.roomCode) {
+        document.getElementById('displayRoomCode').innerText = data.roomCode;
+      }
+
+      if (data.currentQuestion !== localQuestionIndex) {
+        localQuestionIndex = data.currentQuestion;
+        myAnswered = false;
+        mySelected = null;
+        document.getElementById('result').innerHTML = '';
+        document.getElementById('choices').innerHTML = '';
+      }
+
+      renderLeaderboard(data.players || []);
+
+      const pauseBtn = document.getElementById('pauseBtn');
+      if(pauseBtn) pauseBtn.innerText = data.isPaused ? "Resume Timer" : "Pause Timer";
+
+      if (!data.quizStarted || !data.question) {
+        document.getElementById('questionTitle').innerText = 'Waiting for teacher...';
+        document.getElementById('choices').innerHTML = '';
+        document.getElementById('timer').innerText = '--';
+        return;
+      }
+
+      document.getElementById('questionTitle').innerText = 'Question ' + (data.currentQuestion + 1) + ' of ' + data.totalQuestions + ': ' + data.question.text;
+
+      const choicesContainer = document.getElementById('choices');
+      const isAlreadyRevealed = choicesContainer.innerHTML.includes('✅');
+      const needsRedraw = choicesContainer.innerHTML === '' || (data.revealAnswer && !isAlreadyRevealed);
+
+      if (needsRedraw) {
+        const buttons = data.question.choices.map((c, i) => {
+          let extra = '';
+          if (data.revealAnswer && data.correctAnswer === i) extra = ' ✅';
+          const disabled = (myAnswered || data.revealAnswer || data.isPaused) ? 'disabled' : '';
+          return `<button class="choice" onclick="answer(${i})" ${disabled}>${c}${extra}</button>`;
+        }).join('');
+        choicesContainer.innerHTML = buttons;
+      }
+
+      // If the teacher paused the quiz, temporarily disable choice buttons
+      if (data.isPaused && !data.revealAnswer) {
+          document.querySelectorAll('.choice').forEach(btn => btn.disabled = true);
+      } else if (!data.isPaused && !myAnswered && !data.revealAnswer) {
+          document.querySelectorAll('.choice').forEach(btn => btn.disabled = false);
+      }
+
+      if (data.revealAnswer) {
+        if (mySelected === null) document.getElementById('result').innerHTML = '<p class="bad">No answer submitted.</p>';
+        else if (mySelected === data.correctAnswer) document.getElementById('result').innerHTML = '<p class="good">+1 Point! Correct answer.</p>';
+        else document.getElementById('result').innerHTML = '<p class="bad">Wrong answer.</p>';
+      }
+    });
+
+    socket.on('teacher:granted', (data) => {
+      teacherMode = true;
+      document.getElementById('teacherControls').style.display = 'block';
+      document.getElementById('displayRoomCode').innerText = data.roomCode;
+      document.getElementById('teacherStatus').innerText = 'Teacher controls enabled on this device.';
+    });
+
+    socket.on('teacher:denied', (msg) => { alert(msg || 'Teacher access denied.'); });
+    socket.on('joined', data => { 
+        document.getElementById('me').innerText = 'Joined as ' + data.name; 
+        document.getElementById('joinCode').disabled = true;
+        document.getElementById('name').disabled = true;
+    });
+    
+    socket.on('new-question', () => {
+      myAnswered = false;
+      mySelected = null;
+      document.getElementById('result').innerHTML = '';
+    });
+
+    socket.on('error-message', msg => { alert(msg); });
+  </script>
+</body>
+</html>

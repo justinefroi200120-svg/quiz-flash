@@ -1,0 +1,14 @@
+{
+  "name": "socket-quiz-app-simple",
+  "version": "1.0.0",
+  "description": "Real-time quiz app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pdfkit": "^0.19.1",
+    "socket.io": "^4.7.2"
+  }
+}
