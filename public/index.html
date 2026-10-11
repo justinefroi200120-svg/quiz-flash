@@ -48,8 +48,12 @@
       <div id="me" class="muted"></div>
     </div>
 
-    <div class="card">
+    <!-- ADDED id="questionCard" to easily hide it from non-joined users -->
+    <div class="card" id="questionCard" style="display: none;">
       <h2 id="questionTitle">Waiting for teacher...</h2>
+      <!-- ADDED live participant counter -->
+      <div id="participantCount" class="badge" style="background: #3b82f6; margin-bottom: 15px;">0 Participants</div>
+      
       <div class="timer" id="timer">--</div>
       <div id="choices"></div>
       <div id="result"></div>
@@ -64,6 +68,7 @@
   <script>
     const socket = io();
     let teacherMode = false;
+    let hasJoined = false; // Tracks if this specific user has joined the room
     let myAnswered = false;
     let mySelected = null;
     let localQuestionIndex = -1;
@@ -155,6 +160,17 @@
     });
 
     socket.on('update', data => {
+      // HIDE QUESTIONS FROM UNJOINED USERS (unless they are the teacher)
+      if (!hasJoined && !teacherMode) {
+        document.getElementById('questionCard').style.display = 'none';
+      } else {
+        document.getElementById('questionCard').style.display = 'block';
+      }
+
+      // UPDATE LIVE PARTICIPANT COUNTER
+      const playerCount = data.players ? data.players.length : 0;
+      document.getElementById('participantCount').innerText = `${playerCount} Participant${playerCount !== 1 ? 's' : ''}`;
+
       if (data.roomCode) {
         document.getElementById('displayRoomCode').innerText = data.roomCode;
       }
@@ -188,7 +204,8 @@
       if (needsRedraw) {
         const buttons = data.question.choices.map((c, i) => {
           let extra = '';
-          if (data.revealAnswer && data.correctAnswer === i) extra = ' ✅';
+          // DO NOT display the checkmark on the teacher's screen
+          if (data.revealAnswer && data.correctAnswer === i && !teacherMode) extra = ' ✅';
           const disabled = (myAnswered || data.revealAnswer || data.isPaused) ? 'disabled' : '';
           return `<button class="choice" onclick="answer(${i})" ${disabled}>${c}${extra}</button>`;
         }).join('');
@@ -203,9 +220,15 @@
       }
 
       if (data.revealAnswer) {
-        if (mySelected === null) document.getElementById('result').innerHTML = '<p class="bad">No answer submitted.</p>';
-        else if (mySelected === data.correctAnswer) document.getElementById('result').innerHTML = '<p class="good">+1 Point! Correct answer.</p>';
-        else document.getElementById('result').innerHTML = '<p class="bad">Wrong answer.</p>';
+        if (teacherMode) {
+          // Keep correct answer hidden on the projector screen for paper-answering students
+          document.getElementById('result').innerHTML = '<p class="muted">Time is up! Answers are hidden on the projector.</p>';
+        } else {
+          // Students see their own results
+          if (mySelected === null) document.getElementById('result').innerHTML = '<p class="bad">No answer submitted.</p>';
+          else if (mySelected === data.correctAnswer) document.getElementById('result').innerHTML = '<p class="good">+1 Point! Correct answer.</p>';
+          else document.getElementById('result').innerHTML = '<p class="bad">Wrong answer.</p>';
+        }
       }
     });
 
@@ -214,10 +237,14 @@
       document.getElementById('teacherControls').style.display = 'block';
       document.getElementById('displayRoomCode').innerText = data.roomCode;
       document.getElementById('teacherStatus').innerText = 'Teacher controls enabled on this device.';
+      // Force UI update to show the question card to the teacher
+      document.getElementById('questionCard').style.display = 'block';
     });
 
     socket.on('teacher:denied', (msg) => { alert(msg || 'Teacher access denied.'); });
+    
     socket.on('joined', data => { 
+        hasJoined = true; // Mark as successfully joined
         document.getElementById('me').innerText = 'Joined as ' + data.name; 
         document.getElementById('joinCode').disabled = true;
         document.getElementById('name').disabled = true;
